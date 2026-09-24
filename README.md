@@ -72,8 +72,9 @@ homework runner.
 ```
 
 
-Solution description
+### Solution description
 
 The implementation separates chain construction from receipt processing. In build_chain(), a structured extraction prompt is combined with the required deepseek model to create a reusable LangChain pipeline. In answer_queries(), each receipt image is encoded and placed in a multimodal HumanMessage, and all receipt messages will be processed using chain.batch(). The model returns structured JSON containing the final payment after rounding, the subtotal before rounding, and all discount amounts for each receipt. These values are parsed and aggregated with Python Decimal: the first answer sums the final payments, while the second answer adds the absolute value of every discount back to each subtotal without adding back rounding. The function then returns the two totals as single formatted HKD amounts.
 
-
+### Reflection
+Over the past ten days, I completed this homework using LangChain and the DeepSeek vision model. This assignment reads receipt images, extracts the payment, subtotal, and discounts in JSON format, and then calculates the two final amounts with Python. The main challenge was making the model return a consistent format and correctly separating discounts from rounding. This homework helped me understand that building an AI application is not only about calling a model; prompt design, data processing, and output checking are also important.
