@@ -50,4 +50,30 @@ homework runner.
 
 ## Homework 1 solution: 
 > to students: please fill your solution description here.
+### Chain design
+```mermaid
+    flowchart LR
+        subgraph BuildChain["build_chain()"]
+            A["Receipt extraction prompt"] --> B["ChatPromptTemplate"]
+            B --> D["LangChain: prompt | model"]
+            C["DeepSeek vision model"] --> D
+        end
+    
+        subgraph AnswerQueries["answer_queries()"]
+            E["Receipt images"] --> F["Multimodal HumanMessages"]
+            F --> G["chain.batch()"]
+            G --> H["JSON result for each receipt"]
+            H --> I["Parse payment, subtotal, and discounts"]
+            I --> J["Aggregate with Decimal"]
+            J --> K["Two formatted HKD answers"]
+        end
+    
+        D --> G
+```
+
+
+Solution description
+
+The implementation separates chain construction from receipt processing. In build_chain(), a structured extraction prompt is combined with the required deepseek model to create a reusable LangChain pipeline. In answer_queries(), each receipt image is encoded and placed in a multimodal HumanMessage, and all receipt messages will be processed using chain.batch(). The model returns structured JSON containing the final payment after rounding, the subtotal before rounding, and all discount amounts for each receipt. These values are parsed and aggregated with Python Decimal: the first answer sums the final payments, while the second answer adds the absolute value of every discount back to each subtotal without adding back rounding. The function then returns the two totals as single formatted HKD amounts.
+
 

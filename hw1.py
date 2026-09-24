@@ -12,7 +12,10 @@ import re
 from decimal import Decimal, InvalidOperation
 from pathlib import Path
 from typing import Any
-
+from langchain_core.messages import HumanMessage
+from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
+from langchain_core.messages import SystemMessage
+from langchain_deepseek import ChatDeepSeek
 
 QUERY_1 = "How much money did I spend in total for these bills?"
 QUERY_2 = "How much would I have had to pay without the discount?"
@@ -63,7 +66,45 @@ def build_chain() -> Any:
     ``deepseek-v4-flash-vision-exp``. The API key is loaded from .env.
     """
     ### YOUR CODE HERE
-    return None
+    system_prompt="""
+    
+    Extract accounting fields from one supermarket receipt image.
+
+    Return JSON only, using exactly this structure:
+    {
+      "amount_paid_after_rounding": "102.30",
+      "subtotal_after_discounts_before_rounding": "102.31",
+      "discounts": ["-5.39"]
+    }
+
+    Rules:
+    - amount_paid_after_rounding is the final payable or charged amount
+      after ROUNDING.
+    - Do not confuse it with cash tendered, change, card balance, points,
+      savings, or transaction numbers.
+    - subtotal_after_discounts_before_rounding is the printed SUBTOTAL
+      before ROUNDING.
+    - discounts contains every actual discount, promotion, coupon,
+      member discount, app discount, or percentage discount amount.
+    - Use the actual applied monetary amount, not a percentage or
+      promotional description.
+    - Never include ROUNDING in discounts.
+    - If there is no discount, return an empty list.
+    - Return valid JSON only, with no Markdown and no explanation.
+
+    """
+    prompt=ChatPromptTemplate.from_messages(
+        [SystemMessage(content=system_prompt),
+         MessagesPlaceholder(variable_name="messages"),
+         ]
+    )
+
+    model = ChatDeepSeek(
+        model="deepseek-v4-flash-vision-exp",
+        temperature=0,
+        max_retries=3,
+    )
+    return prompt | model
 
 
 def answer_queries(chain: Any, images: list[Path]) -> dict[str, Any]:
@@ -79,8 +120,49 @@ def answer_queries(chain: Any, images: list[Path]) -> dict[str, Any]:
     to process independent receipt-extraction prompts in parallel.
     """
     ### YOUR CODE HERE
-    _ = (chain, images)
-    return {QUERY_1: DUMMY_RESPONSE, QUERY_2: DUMMY_RESPONSE}
+    inputs = []
+    for path in images:
+        message=HumanMessage(
+            content=[{
+                "type":"text",
+                "text":"Please Extract the required receipt fields as JSON",
+            },
+            {
+                "type":"image_url",
+                "image_url":{
+                    'url':image_data_url(path),
+                },
+            }
+            ]
+        )
+        inputs.append({"messages":[message]})
+
+    model_results= chain.batch(inputs,config={"max_concurrency":3})
+
+    paid_total = Decimal("0.00")
+    without_discount_total = Decimal("0.00")
+
+    for path,result in zip(images,model_results):
+        text = response_text(result)
+        data = json.loads(text)
+        paid = Decimal(data["amount_paid_after_rounding"])
+        subtotal = Decimal(data["subtotal_after_discounts_before_rounding"])
+        discounts = [Decimal(value)
+                     for value in data["discounts"]
+        ]
+        paid_total+=paid
+        without_discount_total+=(
+            subtotal+sum((abs(value) for value in discounts),Decimal("0.00"))
+        )
+    paid_total= paid_total.quantize(Decimal("0.01"))
+    without_discount_total=without_discount_total.quantize(Decimal("0.00"))
+    return{
+        QUERY_1: f"HK${paid_total:.2f}",
+        QUERY_2: f"HK${without_discount_total:.2f}",
+    }
+
+    # _ = (chain, images)
+    # return {QUERY_1: DUMMY_RESPONSE, QUERY_2: DUMMY_RESPONSE}
 
 
 # Everything below is provided runner/scoring code. No edits are needed.
